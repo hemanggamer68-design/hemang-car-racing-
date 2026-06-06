@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<user-scalable lang="en">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -91,6 +91,8 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- GLTF Loader add kiya naye 3D models ke liye -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 (function () {
 'use strict';
@@ -447,154 +449,44 @@ for(var tli=0; tli<NUM_TL; tli++){
   trafficLights.push(tlg);
 }
 
-// ── CAR MODEL ─────────────────────────────────────────────────────────────────
+// ── CAR MODEL CONTAINER ───────────────────────────────────────────────────────
 var carGroup = new THREE.Group();
+scene.add(carGroup);
 
-var bodyMat = new THREE.MeshPhongMaterial({color:0xcc0000, specular:0x440000, shininess:80});
-var carBody = box(2.4, 0.55, 4.8, bodyMat);
-carBody.position.y = 0.38;
-carBody.castShadow = true;
-
-var bumpMat = new THREE.MeshPhongMaterial({color:0xaa0000, shininess:60});
-var frontBumper = box(2.4, 0.35, 0.6, bumpMat);
-frontBumper.position.set(0, 0.2, -2.5);
-
-var rearBumper = box(2.4, 0.35, 0.6, bumpMat);
-rearBumper.position.set(0, 0.2, 2.5);
-
-var cabin = box(2.0, 0.5, 2.2, new THREE.MeshPhongMaterial({color:0xbb0000, shininess:80}));
-cabin.position.set(0, 0.88, 0.3);
-cabin.castShadow = true;
-
-var wsMat = new THREE.MeshPhongMaterial({color:0x223344, transparent:true, opacity:0.7, shininess:100, specular:new THREE.Color(0x8899aa)});
-var windshield = box(1.85, 0.48, 0.08, wsMat);
-windshield.position.set(0, 0.82, -0.82);
-windshield.rotation.x = -0.3;
-
-var rwMat = new THREE.MeshPhongMaterial({color:0x223344, transparent:true, opacity:0.7, shininess:100});
-var rearWin = box(1.85, 0.45, 0.08, rwMat);
-rearWin.position.set(0, 0.82, 1.38);
-rearWin.rotation.x = 0.3;
-
-var hood = box(2.2, 0.08, 1.6, new THREE.MeshPhongMaterial({color:0xcc0000, shininess:90}));
-hood.position.set(0, 0.65, -1.5);
-
-var spoilerMat = new THREE.MeshPhongMaterial({color:0xffaa00, shininess:70});
-var spoilerBase = box(2.2, 0.08, 0.5, spoilerMat);
-spoilerBase.position.set(0, 1.12, 2.0);
-
-var spoilerWingL = box(0.08, 0.3, 0.5, spoilerMat);
-spoilerWingL.position.set(-1.0, 0.98, 2.0);
-var spoilerWingR = spoilerWingL.clone();
-spoilerWingR.position.x = 1.0;
-
-// Side skirts
-[-1.22, 1.22].forEach(function(sx){
-  var sk = box(0.12, 0.25, 4.2, new THREE.MeshPhongMaterial({color:0x990000, shininess:60}));
-  sk.position.set(sx, 0.18, 0);
-  carGroup.add(sk);
+// Purane red blocky car model ko hata diya aur loader lagaya tumhari Lamborghini ke liye
+var loader = new THREE.GLTFLoader();
+loader.load('CAR Model.glb', function(gltf) {
+  var model = gltf.scene;
+  
+  // Model size aur rotation setup taki sahi direction mein chale
+  model.scale.set(1.4, 1.4, 1.4); 
+  model.rotation.y = Math.PI; // 180 degree turn taki car camera ke samne face kare
+  model.position.y = 0.1; // Thoda sa upar adjust kiya ground level se
+  
+  // Shadows enable karne ke liye loop
+  model.traverse(function(node) {
+    if (node.isMesh) {
+      node.castShadow = true;
+      node.receiveShadow = true;
+    }
+  });
+  
+  carGroup.add(model);
+}, undefined, function(error) {
+  console.error('Lamborghini load nahi ho payi:', error);
 });
 
-// Side mirrors
-[-1.22, 1.22].forEach(function(sx){
-  var mir = box(0.15, 0.12, 0.35, new THREE.MeshPhongMaterial({color:0xcc0000, shininess:80}));
-  mir.position.set(sx, 0.78, -0.88);
-  carGroup.add(mir);
-});
-
-// Door lines
-[-1.19, 1.19].forEach(function(sx){
-  var dl = box(0.05, 0.38, 1.8, new THREE.MeshPhongMaterial({color:0x880000}));
-  dl.position.set(sx, 0.52, 0.18);
-  carGroup.add(dl);
-});
-
-// Headlights
+// Headlights (Asli lights ko waise hi rakha taki road par roshni dikhe)
 [[-0.78, -2.41], [0.78, -2.41]].forEach(function(p){
-  var hl = box(0.55, 0.18, 0.1, new THREE.MeshPhongMaterial({
-    color:0xffffff, emissive:new THREE.Color(0xffffaa), emissiveIntensity:0.8
-  }));
-  hl.position.set(p[0], 0.44, p[1]);
-  carGroup.add(hl);
   var ptl = new THREE.PointLight(0xffffff, 1.2, 22);
   ptl.position.set(p[0], 0.5, p[1]-1);
   carGroup.add(ptl);
 });
 
-// Tail lights
-[[-0.78, 2.41], [0.78, 2.41]].forEach(function(p){
-  var tl = box(0.55, 0.18, 0.1, new THREE.MeshPhongMaterial({
-    color:0xff0000, emissive:new THREE.Color(0xff0000), emissiveIntensity:0.5
-  }));
-  tl.position.set(p[0], 0.44, p[1]);
-  carGroup.add(tl);
-});
-
-// Exhaust pipes
-[-0.5, 0.5].forEach(function(ex){
-  var exh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.1, 0.3, 8),
-    new THREE.MeshPhongMaterial({color:0x888888, shininess:90})
-  );
-  exh.rotation.x = Math.PI/2;
-  exh.position.set(ex, 0.15, 2.54);
-  carGroup.add(exh);
-});
-
-// Add main parts
-carGroup.add(carBody, frontBumper, rearBumper, cabin, windshield, rearWin, hood,
-             spoilerBase, spoilerWingL, spoilerWingR);
-
-// ── Wheels ────────────────────────────────────────────────────────────────────
-var tireMat  = new THREE.MeshPhongMaterial({color:0x111111, shininess:20});
-var rimMat   = new THREE.MeshPhongMaterial({color:0xcccccc, shininess:100, specular:new THREE.Color(0xffffff)});
-var spokeMat = new THREE.MeshPhongMaterial({color:0xbbbbbb, shininess:90});
-var discMat  = new THREE.MeshPhongMaterial({color:0x333333, shininess:40});
-
-var allTires = [], frontWheelGroups = [];
-
-  [
-  [-1.22, 0.32, -1.55, true ],
-  [ 1.22, 0.32, -1.55, true ],
-  [-1.22, 0.32,  1.55, false],
-  [ 1.22, 0.32,  1.55, false],
-].forEach(function(wd){
-  var wg = new THREE.Group();
-  wg.position.set(wd[0], wd[1], wd[2]);
-
-  var tire = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.28, 14), tireMat);
-  tire.rotation.z = Math.PI/2;
-  wg.add(tire);
-  allTires.push(tire);
-
-  var rimOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.29, 14), rimMat);
-  rimOuter.rotation.z = Math.PI/2;
-  wg.add(rimOuter);
-
-  var rimCap = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.30, 8), rimMat);
-  rimCap.rotation.z = Math.PI/2;
-  wg.add(rimCap);
-
-  for(var s=0; s<5; s++){
-    var spoke = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.30, 0.18), spokeMat);
-    spoke.rotation.z = (s/5)*Math.PI*2;
-    wg.add(spoke);
-  }
-
-  var disc = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.31, 10), discMat);
-  disc.rotation.z = Math.PI/2;
-  wg.add(disc);
-
-  carGroup.add(wg);
-  if(wd[3]) frontWheelGroups.push(wg);
-});
-carGroup.castShadow = true;
-carGroup.position.set(0, 0, 0);
-scene.add(carGroup);
-
 // ── Traffic cars ──────────────────────────────────────────────────────────────
 var trafficCars = [];
 var trafficColors = [0x0000ff, 0xffff00, 0xffffff, 0xff6600, 0x9900ff, 0x00aa00];
+var tireMat  = new THREE.MeshPhongMaterial({color:0x111111, shininess:20});
 var tcTireGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 10);
 
 trafficColors.forEach(function(color, i){
@@ -667,7 +559,8 @@ function updateTimer() {
   gameTime += (now - lastHUDTime)/1000;
   lastHUDTime = now;
   var m  = Math.floor(gameTime/60).toString().padStart(2,'0');
-  var s  = Math.floor(gameTime%60).toString().padStart(2,'0');
+  var s  = Math.floor(gameTime%60).toString
+     ().padStart(2,'0');
   var ms = Math.floor((gameTime%1)*100).toString().padStart(2,'0');
   timerEl.textContent = m+':'+s+':'+ms;
 }
@@ -700,13 +593,7 @@ function animate(){
   // 4. Body lean
   carGroup.rotation.z = -steer*0.22;
 
-  // 5. Wheel spin + front steer
-  for(var wi=0; wi<allTires.length; wi++) allTires[wi].rotation.x += speed*0.05*dt;
-  for(var fi=0; fi<frontWheelGroups.length; fi++){
-    frontWheelGroups[fi].rotation.y += (steer*0.9 - frontWheelGroups[fi].rotation.y)*0.25*dt;
-  }
-
-  // 6. Recycle road segments (straight, x always 0)
+  // 5. Recycle road segments (straight, x always 0)
   for(var ri=0; ri<roadSegs.length; ri++){
     if(roadSegs[ri].position.z > carGroup.position.z+100){
       roadSegs[ri].position.z -= TOTAL_ROAD;
@@ -787,7 +674,7 @@ function animate(){
   // 15. Score
   score += speed*0.03*dt;
 
-  // 16. Camera (lower, closer, with speed shake)
+  // 16. Camera
   camOff.set(0, 6, 14);
   camOff.applyQuaternion(carGroup.quaternion);
   var lf = 0.1*dt;
