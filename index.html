@@ -446,7 +446,9 @@ for(var tli=0; tli<NUM_TL; tli++){
   scene.add(tlg);
   trafficLights.push(tlg);
 }
-
+var glScript = document.createElement('script');
+glScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+document.head.appendChild(glScript);
 // ── CAR MODEL ─────────────────────────────────────────────────────────────────
 var carGroup = new THREE.Group();
 
@@ -591,7 +593,33 @@ var allTires = [], frontWheelGroups = [];
 carGroup.castShadow = true;
 carGroup.position.set(0, 0, 0);
 scene.add(carGroup);
-
+setTimeout(function(){
+  if(typeof THREE.GLTFLoader==='undefined') return;
+  var loader = new THREE.GLTFLoader();
+  loader.load('car.glb',
+    function(gltf){
+      var model = gltf.scene;
+      var bbox = new THREE.Box3().setFromObject(model);
+      var size = bbox.getSize(new THREE.Vector3());
+      var scale = 4.0/Math.max(size.x,size.y,size.z);
+      model.scale.set(scale,scale,scale);
+      bbox.setFromObject(model);
+      var c = bbox.getCenter(new THREE.Vector3());
+      model.position.x -= c.x;
+      model.position.z -= c.z;
+      model.position.y -= bbox.min.y;
+      model.rotation.y = Math.PI;
+      model.traverse(function(n){
+        if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}
+      });
+      while(carGroup.children.length>0)
+        carGroup.remove(carGroup.children[0]);
+      carGroup.add(model);
+    },
+    null,
+    function(e){ console.log('GLB Error:', e); }
+  );
+}, 800);
 // ── Traffic cars ──────────────────────────────────────────────────────────────
 var trafficCars = [];
 var trafficColors = [0x0000ff, 0xffff00, 0xffffff, 0xff6600, 0x9900ff, 0x00aa00];
