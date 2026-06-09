@@ -601,7 +601,7 @@ setTimeout(function(){
       var model = gltf.scene;
       var bbox = new THREE.Box3().setFromObject(model);
       var size = bbox.getSize(new THREE.Vector3());
-      var scale = 6.0/Math.max(size.x,size.y,size.z);
+      var scale = 8.0/Math.max(size.x,size.y,size.z);
       model.scale.set(scale,scale,scale);
       bbox.setFromObject(model);
       var c = bbox.getCenter(new THREE.Vector3());
