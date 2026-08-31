@@ -19,27 +19,37 @@
         body {
             width: 100%;
             height: 100%;
+            margin: 0;
+            padding: 0;
             overflow: hidden;
             background: #000;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             color: #e8e8f0;
-            touch-action: none;
+            touch-action: none !important;
+            position: fixed;
         }
         #game-container {
-            width: 100vw;
-            height: 100vh;
+            width: 100vw !important;
+            height: 100vh !important;
             position: fixed;
             top: 0;
             left: 0;
             overflow: hidden;
+            touch-action: none !important;
+            -webkit-user-select: none;
+            user-select: none;
         }
         #gameCanvas {
             position: absolute;
             inset: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw !important;
+            height: 100vh !important;
             display: block;
             z-index: 1;
+            touch-action: none !important;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none !important;
         }
         #rotateMsg {
             position: fixed;
@@ -94,7 +104,7 @@
         .logo {
             font-size: clamp(42px, 12vw, 72px);
             font-weight: 900;
-            letter-spacing: 0.18em;
+            letter-spacing: .18em;
             color: #FF1E27;
             text-shadow: 0 0 15px rgba(255, 30, 39, .6);
         }
@@ -788,7 +798,7 @@
                 this.scene.add(car);
                 for (let i = 0; i < 8; i++) {
                     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.2, 6), new THREE
-                .MeshStandardMaterial({ color: 0x5d4037 }));
+                        .MeshStandardMaterial({ color: 0x5d4037 }));
                     trunk.position.set((Math.random() - 0.5) * 18, 0.6, -6 - Math.random() * 6);
                     trunk.castShadow = true;
                     this.scene.add(trunk);
@@ -914,8 +924,7 @@
                 });
                 document.getElementById('btnTraining').addEventListener('click', () => startMatch());
                 document.getElementById('btnSolo').addEventListener('click', () => startMatch());
-                document.getElementById('btnSettings').addEventListener('click', () => showToast(
-                    'Settings: Gyro + Touch enabled'));
+                document.getElementById('btnSettings').addEventListener('click', () => showToast('Settings: Touch mode'));
             }
             enter() {
                 this.controls.enabled = true;
@@ -958,17 +967,12 @@
                 this.lastShot = 0;
                 this.fireRate = 0.11;
                 this.raycaster = new THREE.Raycaster();
-                this.gyroEnabled = false;
-                this.gyroAlpha = 0;
-                this.gyroBeta = 0;
-                this.baseAlpha = null;
                 this.recoilKick = 0;
                 this.camOffset = new THREE.Vector3(0, 2.2, 4.8);
                 this.lookAtOffset = new THREE.Vector3(0, 1.5, 0);
                 this._createPlayer();
-                this._setupTouch();
+                this._setupJoystick();
                 this._setupTouchRotation();
-                this._setupGyro();
                 this._setupButtons();
             }
             _createPlayer() {
@@ -986,11 +990,11 @@
                 head.position.y = 1.85;
                 head.castShadow = true;
                 const hair = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.13, 0.40), hairMat);
-                hair.position.y = 0.17;
+               hair.position.y = 0.17;
                 head.add(hair);
                 const peak = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.20), hairMat);
                 peak.position.set(0, 0.09, 0.24);
-         head.add(peak);
+                head.add(peak);
                 group.add(head);
                 const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.12, 8), skinMat);
                 neck.position.y = 1.68;
@@ -1047,9 +1051,10 @@
                 group.add(gunGroup);
                 this.gun = gunGroup;
                 this.mesh = group;
+                this.mesh.position.y = 2;
                 this.scene.add(group);
             }
-            _setupTouch() {
+            _setupJoystick() {
                 const zone = document.getElementById('joyZone');
                 const base = document.getElementById('joyBase');
                 const knob = document.getElementById('joyKnob');
@@ -1081,7 +1086,8 @@
                     const t = e.changedTouches ? e.changedTouches[0] : e;
                     move(t.clientX, t.clientY);
                 };
-                const onEnd = () => {
+                const onEnd = (e) => {
+                    if (e) e.preventDefault();
                     active = false;
                     knob.style.transform = 'translate(-50%, -50%)';
                     this.moveInput.x = 0;
@@ -1089,117 +1095,68 @@
                 };
                 zone.addEventListener('touchstart', onStart, { passive: false });
                 zone.addEventListener('touchmove', onMove, { passive: false });
-                zone.addEventListener('touchend', onEnd);
-                zone.addEventListener('touchcancel', onEnd);
+                zone.addEventListener('touchend', onEnd, { passive: false });
+                zone.addEventListener('touchcancel', onEnd, { passive: false });
                 zone.addEventListener('mousedown', onStart);
                 window.addEventListener('mousemove', onMove);
                 window.addEventListener('mouseup', onEnd);
             }
+            // PURE TOUCH CAMERA ROTATION - NO GYROSCOPE
             _setupTouchRotation() {
-                let activeTouchId = null;
-                let lastTouchX = 0,
-                    lastTouchY = 0;
-                const sensitivity = 0.006;
+                let touchStartX = 0;
+                let touchStartY = 0;
+                let isRotating = false;
+                const SENSITIVITY = 0.003;
 
-                const isInJoyZone = (x, y) => {
+                const isInUI = (x, y) => {
                     const joyZone = document.getElementById('joyZone');
-                    const r = joyZone.getBoundingClientRect();
-                    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-                };
-                const isInActionBtns = (x, y) => {
-                    const btns = document.querySelector('.action-btns');
-                    const r = btns.getBoundingClientRect();
-                    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-                };
-                const isInCamToggle = (x, y) => {
-                    const el = document.getElementById('btnCam');
-                    const r = el.getBoundingClientRect();
-                    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+                    const r1 = joyZone.getBoundingClientRect();
+                    if (x >= r1.left && x <= r1.right && y >= r1.top && y <= r1.bottom) return true;
+                    const actions = document.querySelector('.action-btns');
+                    const r2 = actions.getBoundingClientRect();
+                    if (x >= r2.left && x <= r2.right && y >= r2.top && y <= r2.bottom) return true;
+                    const camToggle = document.getElementById('btnCam');
+                    const r3 = camToggle.getBoundingClientRect();
+                    if (x >= r3.left && x <= r3.right && y >= r3.top && y <= r3.bottom) return true;
+                    return false;
                 };
 
-                canvas.addEventListener('touchstart', (e) => {
-                    for (const touch of e.changedTouches) {
-                        const x = touch.clientX,
-                            y = touch.clientY;
-                        if (isInJoyZone(x, y) || isInActionBtns(x, y) || isInCamToggle(x, y)) continue;
-                        activeTouchId = touch.identifier;
-                        lastTouchX = x;
-                        lastTouchY = y;
-                        break;
-                    }
-                }, { passive: true });
-
-                canvas.addEventListener('touchmove', (e) => {
-                    for (const touch of e.changedTouches) {
-                        if (touch.identifier === activeTouchId) {
-                            const dx = touch.clientX - lastTouchX;
-                            const dy = touch.clientY - lastTouchY;
-                            this.cameraYaw -= dx * sensitivity;
-                            this.cameraPitch += dy * sensitivity;
-                            this.cameraPitch = THREE.MathUtils.clamp(this.cameraPitch, -0.5, 0.8);
-                            lastTouchX = touch.clientX;
-                            lastTouchY = touch.clientY;
-                            break;
+                window.addEventListener('touchstart', (e) => {
+                    for (let t of e.changedTouches) {
+                        if (t.clientX > window.innerWidth / 2 && !isInUI(t.clientX, t.clientY)) {
+                            isRotating = true;
+                            touchStartX = t.clientX;
+                            touchStartY = t.clientY;
                         }
                     }
-                }, { passive: true });
+                }, { passive: false });
 
-                canvas.addEventListener('touchend', (e) => {
-                    for (const touch of e.changedTouches) {
-                        if (touch.identifier === activeTouchId) activeTouchId = null;
-                    }
-                });
-                canvas.addEventListener('touchcancel', (e) => {
-                    for (const touch of e.changedTouches) {
-                        if (touch.identifier === activeTouchId) activeTouchId = null;
-                    }
-                });
+                window.addEventListener('touchmove', (e) => {
+                    for (let t of e.changedTouches) {
+                        if (t.clientX > window.innerWidth / 2 && isRotating) {
+                            e.preventDefault();
+                            const deltaX = t.clientX - touchStartX;
+                            const deltaY = t.clientY - touchStartY;
 
-                let mouseDown = false;
-                canvas.addEventListener('mousedown', (e) => {
-                    if (isInJoyZone(e.clientX, e.clientY) || isInActionBtns(e.clientX, e.clientY) || isInCamToggle(e.clientX, e
-                            .clientY)) return;
-                    mouseDown = true;
-                    lastTouchX = e.clientX;
-                    lastTouchY = e.clientY;
-                });
-                canvas.addEventListener('mousemove', (e) => {
-                    if (!mouseDown) return;
-                    const dx = e.clientX - lastTouchX;
-                    const dy = e.clientY - lastTouchY;
-                    this.cameraYaw -= dx * sensitivity;
-                    this.cameraPitch += dy * sensitivity;
-                    this.cameraPitch = THREE.MathUtils.clamp(this.cameraPitch, -0.5, 0.8);
-                    lastTouchX = e.clientX;
-                    lastTouchY = e.clientY;
-                });
-                canvas.addEventListener('mouseup', () => { mouseDown = false; });
-            }
-            _setupGyro() {
-                if (typeof DeviceOrientationEvent !== 'undefined') {
-                    const enable = () => {
-                        window.addEventListener('deviceorientation', (e) => {
-                            if (e.alpha == null) return;
-                            if (this.baseAlpha === null) this.baseAlpha = e.alpha;
-                            this.gyroAlpha = e.alpha;
-                            this.gyroBeta = e.beta || 0;
-                            this.gyroEnabled = true;
-                        });
-                    };
-                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        document.body.addEventListener('touchend', () => {
-                            DeviceOrientationEvent.requestPermission().then(s => {
-                                if (s === 'granted') enable();
-                            }).catch(() => {});
-                        }, { once: true });
-                    } else { enable(); }
-                }
+                            this.cameraYaw -= deltaX * SENSITIVITY;
+                            this.cameraPitch -= deltaY * SENSITIVITY;
+                            this.cameraPitch = Math.max(-1.2, Math.min(1.2, this.cameraPitch));
+
+                            touchStartX = t.clientX;
+                            touchStartY = t.clientY;
+                        }
+                    }
+                }, { passive: false });
+
+                window.addEventListener('touchend', () => { isRotating = false; });
+                window.addEventListener('touchcancel', () => { isRotating = false; });
             }
             _setupButtons() {
                 const fireBtn = document.getElementById('btnFire');
                 fireBtn.addEventListener('touchstart', (e) => { e.preventDefault();
                     this.fireHeld = true; }, { passive: false });
-                fireBtn.addEventListener('touchend', () => { this.fireHeld = false; });
+                fireBtn.addEventListener('touchend', (e) => { e.preventDefault();
+                    this.fireHeld = false; }, { passive: false });
                 fireBtn.addEventListener('mousedown', () => { this.fireHeld = true; });
                 fireBtn.addEventListener('mouseup', () => { this.fireHeld = false; });
                 document.getElementById('btnJump').addEventListener('click', () => this.jump());
@@ -1291,7 +1248,7 @@
                 }
             }
             update(dt, bots, bounds) {
-                // ===== JOYSTICK MOVEMENT (FIXED) =====
+                // Movement using joystick input
                 let dirX = this.moveInput.x;
                 let dirY = this.moveInput.y;
                 if (Math.abs(dirX) > 0.05 || Math.abs(dirY) > 0.05) {
@@ -1302,13 +1259,8 @@
                     moveDir.normalize();
                     let rightDir = new THREE.Vector3();
                     rightDir.crossVectors(moveDir, new THREE.Vector3(0, 1, 0)).normalize();
-
-                    // Joystick UP (dirY>0) → FORWARD (removed negative sign)
                     this.mesh.position.addScaledVector(moveDir, dirY * moveSpeed);
-                    // Joystick RIGHT (dirX>0) → STRAFE RIGHT
                     this.mesh.position.addScaledVector(rightDir, dirX * moveSpeed);
-
-                    // Player faces movement direction (only while moving)
                     const moveDirection = new THREE.Vector3();
                     moveDirection.addScaledVector(moveDir, dirY);
                     moveDirection.addScaledVector(rightDir, dirX);
@@ -1320,14 +1272,6 @@
                         this.mesh.rotation.y = targetYaw;
                     }
                 }
-
-                // Gyro offset (if enabled)
-                if (this.gyroEnabled) {
-                    const dAlpha = ((this.gyroAlpha - this.baseAlpha) * Math.PI) / 180;
-                    this.cameraYaw = -dAlpha;
-                    this.cameraPitch = THREE.MathUtils.clamp(((this.gyroBeta - 45) * Math.PI) / 180, -0.5, 0.8);
-                }
-
                 // Gravity
                 this.velocity.y -= 19 * dt;
                 this.mesh.position.y += this.velocity.y * dt;
@@ -1340,8 +1284,7 @@
                 this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -lim, lim);
                 this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -lim, lim);
                 this.recoilKick *= 0.85;
-
-                // ===== CAMERA POSITIONING (FIXED) =====
+                // Camera positioning
                 if (this.isFPS) {
                     this.camera.position.copy(this.mesh.position).add(new THREE.Vector3(0, 1.65, 0));
                     const look = new THREE.Vector3(0, 0, -1);
@@ -1349,16 +1292,15 @@
                     look.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraYaw);
                     this.camera.lookAt(this.camera.position.clone().add(look));
                 } else {
-                    // TPV: Orbit camera around player (using spherical coords)
                     const camDist = 5.2;
                     const camHeight = 2.2;
                     const camX = this.mesh.position.x + camDist * Math.sin(this.cameraYaw) * Math.cos(this.cameraPitch);
-                    const camY = this.mesh.position.y + camHeight + camDist * Math.sin(this.cameraPitch);
+                    let camY = this.mesh.position.y + camHeight + camDist * Math.sin(this.cameraPitch);
                     const camZ = this.mesh.position.z + camDist * Math.cos(this.cameraYaw) * Math.cos(this.cameraPitch);
+                    if (camY < 0.5) camY = 0.5;
                     this.camera.position.set(camX, camY, camZ);
                     this.camera.lookAt(this.mesh.position.clone().add(this.lookAtOffset));
                 }
-
                 if (this.fireHeld) this.shoot(bots);
             }
         }
@@ -1371,7 +1313,7 @@
                 this.speed = 3.3;
                 this.detectRange = 30;
                 this.shootRange = 19;
-           this.lastShot = 0;
+                this.lastShot = 0;
                 this.wanderTimer = 0;
                 this.wanderDir = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
                 this.dead = false;
@@ -1620,11 +1562,10 @@
             setState(STATE.LOADING);
             const fill = document.getElementById('loadFill');
             const tip = document.getElementById('loadTip');
-            const tips = ['Spawning AI bots…', 'Building terrain…', 'Calibrating weapons…', 'Linking gyroscope…',
-            'Almost there…'];
+            const tips = ['Spawning AI bots…', 'Building terrain…', 'Calibrating weapons…', 'Almost there…'];
             for (let i = 0; i <= 100; i += 5) {
                 fill.style.width = i + '%';
-                tip.textContent = tips[Math.min(4, Math.floor(i / 25))];
+                tip.textContent = tips[Math.min(3, Math.floor(i / 28))];
                 await new Promise(r => setTimeout(r, 35));
             }
             game = new GameScene();
@@ -1640,14 +1581,15 @@
         window.addEventListener('resize', onResize);
         window.addEventListener('orientationchange', () => setTimeout(onResize, 120));
 
+        // FIX: Cap delta time to prevent freeze on frame drops
         function animate() {
             requestAnimationFrame(animate);
-            const dt = Math.min(clock.getDelta(), 0.05);
+            const delta = Math.min(clock.getDelta(), 0.1);
             if (appState === STATE.LOBBY) {
-                lobby.update(dt);
+                lobby.update(delta);
                 lobby.render();
             } else if (appState === STATE.GAME && game) {
-                game.update(dt);
+                game.update(delta);
                 game.render();
             } else {
                 renderer.setClearColor(0x000000);
