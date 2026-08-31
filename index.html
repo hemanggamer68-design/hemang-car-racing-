@@ -705,6 +705,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         const STATE = { SPLASH: 0, LOBBY: 1, LOADING: 2, GAME: 3 };
         let appState = STATE.SPLASH;
@@ -990,7 +991,7 @@
                 head.position.y = 1.85;
                 head.castShadow = true;
                 const hair = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.13, 0.40), hairMat);
-               hair.position.y = 0.17;
+                hair.position.y = 0.17;
                 head.add(hair);
                 const peak = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.20), hairMat);
                 peak.position.set(0, 0.09, 0.24);
@@ -1434,21 +1435,10 @@
                 this.bots = null;
                 this.miniCtx = document.getElementById('miniCanvas').getContext('2d');
                 this._buildEnvironment();
+                this._loadClockTower();
             }
             _buildEnvironment() {
-                const groundGeo = new THREE.PlaneGeometry(120, 120, 48, 48);
-                const pos = groundGeo.attributes.position;
-                for (let i = 0; i < pos.count; i++) {
-                    const x = pos.getX(i),
-                        y = pos.getY(i);
-                    pos.setZ(i, Math.sin(x * 0.07) * Math.cos(y * 0.07) * 1.1 + (Math.random() - 0.5) * 0.25);
-                }
-                groundGeo.computeVertexNormals();
-                const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0x7ec850, roughness: 0.88,
-                    metalness: 0.04 }));
-                ground.rotation.x = -Math.PI / 2;
-                ground.receiveShadow = true;
-                this.scene.add(ground);
+                // Invisible boundary walls
                 const wallMat = new THREE.MeshStandardMaterial({ color: 0x5a6a5a, transparent: true, opacity: 0.3 });
                 const size = 50;
                 [
@@ -1461,6 +1451,7 @@
                     m.position.set(x, 1.75, z);
                     this.scene.add(m);
                 });
+                // Lighting
                 this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
                 const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
                 sun.position.set(35, 55, 25);
@@ -1474,17 +1465,60 @@
                 sun.shadow.camera.bottom = -65;
                 this.scene.add(sun);
                 this.scene.add(new THREE.HemisphereLight(0x87b8e0, 0x7ec850, 0.45));
-                for (let i = 0; i < 16; i++) {
-                    const h = 1.4 + Math.random() * 2.2;
-                    const box = new THREE.Mesh(new THREE.BoxGeometry(1.8 + Math.random() * 2, h, 1.8 + Math.random() * 2),
-                        new THREE.MeshStandardMaterial({ color: 0x6b6b55, roughness: 0.7 }));
-                    box.position.set((Math.random() - 0.5) * 78, h / 2, (Math.random() - 0.5) * 78);
-                    box.castShadow = true;
-                    box.receiveShadow = true;
-                    this.scene.add(box);
-                }
+                // Sky
                 this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(150, 24, 16), new THREE.MeshBasicMaterial({ color: 0x6ab0e0,
                     side: THREE.BackSide })));
+            }
+            _loadClockTower() {
+                const loader = new GLTFLoader();
+                const modelUrl = "https://github.com/hemanggamer68-design/hemang-car-racing-/raw/refs/heads/main/clock_tower_free_fire_model.glb";
+                loader.load(
+                    modelUrl,
+                    (gltf) => {
+                        const model = gltf.scene;
+                        // Compute bounding box to scale and position
+                        const box = new THREE.Box3().setFromObject(model);
+                        const size = box.getSize(new THREE.Vector3());
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const targetMax = 70; // Fit within arena boundaries
+                        const scaleFactor = targetMax / maxDim;
+                        model.scale.setScalar(scaleFactor);
+
+                        // Recompute after scaling
+                        const box2 = new THREE.Box3().setFromObject(model);
+                        const center = box2.getCenter(new THREE.Vector3());
+                        // Center horizontally, place base at y=0
+                        model.position.x -= center.x;
+                        model.position.z -= center.z;
+                        model.position.y -= box2.min.y;
+
+                        // Enable shadows on all meshes
+                        model.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                                if (child.material) {
+                                    child.material.needsUpdate = true;
+                                }
+                            }
+                        });
+
+                        this.scene.add(model);
+                        console.log("Clock Tower loaded and added to scene");
+                    },
+                    undefined,
+                    (err) => {
+                        console.error("Failed to load Clock Tower model:", err);
+                        // Fallback: add a simple ground plane if model fails
+                        const ground = new THREE.Mesh(
+                            new THREE.PlaneGeometry(100, 100),
+                            new THREE.MeshStandardMaterial({ color: 0x7ec850, roughness: 0.88, metalness: 0.04 })
+                        );
+                        ground.rotation.x = -Math.PI / 2;
+                        ground.receiveShadow = true;
+                        this.scene.add(ground);
+                    }
+                );
             }
             start() {
                 this.player = new PlayerController(this.scene, this.camera);
